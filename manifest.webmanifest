@@ -1,0 +1,15 @@
+{
+  "name": "드래곤 둥지",
+  "short_name": "드래곤 둥지",
+  "description": "나만의 드래곤을 부화시키고 키우는 모바일 웹 게임",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#1b0f33",
+  "theme_color": "#1b0f33",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
