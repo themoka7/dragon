@@ -123,6 +123,7 @@
     $('#r-gold').textContent = fmt(S.gold);
     $('#r-food').textContent = fmt(S.food);
     $('#dot-hatch').classList.toggle('on', S.eggs.some(G.eggReady));
+    $('#btn-diff').classList.toggle('on', G.MULT_KEYS.some(k => S.mult[k] !== 1));
     $('#dot-shop').classList.toggle('on', G.freeEggLeft() === 0 && S.eggs.length < G.CONFIG.incubators);
   }
 
@@ -139,7 +140,7 @@
 
   function render() {
     renderTop();
-    ({ nest: renderNest, hatch: renderHatch, adventure: renderAdventure, breed: renderBreed, shop: renderShop })[tab]();
+    ({ nest: renderNest, hatch: renderHatch, adventure: renderAdventure, breed: renderBreed, shop: renderShop, difficulty: renderDifficulty })[tab]();
   }
 
   // ----------------------------------------------------------- nest
@@ -184,7 +185,7 @@
         <button class="btn" data-act="pet"><i>🤚</i>쓰다듬기</button>
         <button class="btn ghost" data-act="info"><i>📜</i>정보</button>
       </div>
-      <div class="section-title"><span>내 드래곤</span><small>${S.dragons.length}/${G.CONFIG.nestCap} · 분당 🪙${fmt(S.dragons.reduce((a, x) => a + D.goldRate(x), 0))}</small></div>
+      <div class="section-title"><span>내 드래곤</span><small>${S.dragons.length}/${G.CONFIG.nestCap} · 분당 🪙${fmt(S.dragons.reduce((a, x) => a + G.goldRate(x), 0))}</small></div>
       <div class="roster">
         ${S.dragons.map(x => dragonCard(x, x.id === d.id ? 'sel' : '')).join('')}
         ${S.dragons.length < G.CONFIG.nestCap ? `<button class="card empty" data-tab-go="hatch">＋</button>` : ''}
@@ -248,7 +249,7 @@
       if (!bar) continue;
       const ready = G.eggReady(e);
       bar.style.width = (G.eggProgress(e) * 100).toFixed(1) + '%';
-      document.querySelector(`[data-eggtime="${e.id}"]`).textContent = ready ? '부화 준비 완료!' : `남은 시간 ${fmtTime(e.dur - (Date.now() - e.start))}`;
+      document.querySelector(`[data-eggtime="${e.id}"]`).textContent = ready ? '부화 준비 완료!' : `남은 시간 ${fmtTime(G.eggLeft(e))}`;
       const btn = document.querySelector(`[data-eggbtn="${e.id}"]`);
       btn.innerHTML = ready ? '🐣 부화!' : `⚡ 즉시 부화 <span class="sub">🪙${fmt(G.skipCost(e))}</span>`;
       btn.className = ready ? 'btn gold' : 'btn small';
@@ -337,11 +338,11 @@
           <button class="btn gold" data-act="buy-egg" data-i="${i}">🪙${fmt(it.price)}</button>
         </div>`).join('')}
       </div>
-      <div class="section-title"><span>🍖 먹이</span><small>먹이 1개 = EXP ${G.CONFIG.expPerFood}</small></div>
+      <div class="section-title"><span>🍖 먹이</span><small>먹이 1개 = EXP ${fmt(G.expPerFood())}</small></div>
       <div class="shop-list">
         ${G.SHOP_FOOD.map((it, i) => `<div class="panel shop-item">
           <div class="emoji">🍖</div>
-          <div class="body"><div class="nm">${it.name}</div><div class="ds">개당 🪙${(it.price / it.amount).toFixed(1)}</div></div>
+          <div class="body"><div class="nm">고기 ${fmt(it.amount * S.mult.food)}개</div><div class="ds">개당 🪙${+(it.price / (it.amount * S.mult.food)).toFixed(2)}</div></div>
           <button class="btn" data-act="buy-food" data-i="${i}">🪙${fmt(it.price)}</button>
         </div>`).join('')}
       </div>`;
@@ -356,6 +357,61 @@
         R.drawEgg(ctx, g, t + i, w / 2, h / 2, w * 0.95, {});
       });
     });
+  }
+
+  // ----------------------------------------------------------- difficulty
+  // 비밀번호는 해시만 보관 (브라우저 안에서만 확인하는 간단한 잠금)
+  const PW_HASH = 'dfc93cd0';
+  function pwHash(str) {
+    let x = 2166136261 >>> 0;
+    for (const c of str + '|dragon-nest') { x ^= c.charCodeAt(0); x = Math.imul(x, 16777619) >>> 0; }
+    return x.toString(16);
+  }
+  let diffUnlocked = false;
+  try { diffUnlocked = sessionStorage.getItem('dn-diff') === '1'; } catch (e) { /* ignore */ }
+
+  function openDifficulty() {
+    if (diffUnlocked) { setTab('difficulty'); return; }
+    modal('🔒 난이도 조절', `<p class="center muted">비밀번호를 입력하세요</p>
+      <input id="pw-input" class="pw-input" type="password" inputmode="numeric" autocomplete="off" maxlength="12">
+      <div class="pw-err" id="pw-err"></div>
+      <div class="row"><button class="btn ghost" data-act="close">취소</button><button class="btn gold" data-act="pw-ok">확인</button></div>`);
+    const inp = $('#pw-input');
+    inp.addEventListener('keydown', e => { if (e.key === 'Enter') onAction('pw-ok'); });
+    setTimeout(() => inp.focus(), 50);
+  }
+
+  const MULT_INFO = {
+    gold: { ico: '🪙', nm: '골드 획득량', ds: '드래곤 골드 생산 · 모험 보상 · 놓아주기' },
+    exp: { ico: '✨', nm: '경험치 획득량', ds: '먹이 · 쓰다듬기 · 모험' },
+    food: { ico: '🍖', nm: '먹이 획득량', ds: '모험 보상 · 상점 구매' },
+    hatch: { ico: '🥚', nm: '부화 속도', ds: '부화 중인 알에도 바로 적용' },
+  };
+  const CHIPS = [0.5, 1, 2, 10, 100, 1000];
+  const PRESETS = [
+    { nm: '어려움', ico: '💀', v: 0.5 }, { nm: '보통', ico: '🙂', v: 1 }, { nm: '쉬움', ico: '😊', v: 3 },
+    { nm: '매우 쉬움', ico: '🥳', v: 10 }, { nm: '치트', ico: '👑', v: 1000 },
+  ];
+  const fmtMult = v => '×' + (v >= 1000 ? fmt(v) : String(+v.toFixed(2)));
+
+  function renderDifficulty() {
+    const S = G.S;
+    const el = $('#screen-difficulty');
+    if (!diffUnlocked) { el.innerHTML = ''; setTab('nest'); return; }
+    el.innerHTML = `
+      <div class="section-title"><span>🎚️ 난이도 조절</span><button class="btn small ghost" data-act="diff-lock">🔒 잠그기</button></div>
+      <div class="presets">${PRESETS.map(p => `<button class="btn ${G.MULT_KEYS.every(k => S.mult[k] === p.v) ? 'gold' : 'ghost'}" data-act="mult-preset" data-v="${p.v}"><i>${p.ico}</i>${p.nm}</button>`).join('')}</div>
+      <div class="section-title"><span>항목별 배율</span><small>최소 ×${G.MULT_MIN} · 최대 ×${fmt(G.MULT_MAX)}</small></div>
+      <div class="mult-list">${G.MULT_KEYS.map(k => {
+        const I = MULT_INFO[k], v = S.mult[k];
+        return `<div class="panel mult-card">
+          <div class="head"><span class="ico">${I.ico}</span><div><div class="nm">${I.nm}</div><div class="ds">${I.ds}</div></div><span class="val">${fmtMult(v)}</span></div>
+          <div class="chips">${CHIPS.map(c => `<button class="chip ${v === c ? 'on' : ''}" data-act="mult-set" data-k="${k}" data-v="${c}">${fmtMult(c)}</button>`).join('')}</div>
+          <div class="custom"><input id="mult-${k}" type="number" inputmode="decimal" min="${G.MULT_MIN}" max="${G.MULT_MAX}" step="any" placeholder="직접 입력 (예: 250)"><button class="btn small" data-act="mult-custom" data-k="${k}">적용</button></div>
+        </div>`;
+      }).join('')}</div>
+      <p class="muted center" style="font-size:13px;margin-top:14px">배율은 바로 적용돼요. 상점 가격과 진화 비용은 바뀌지 않아요.</p>
+      <button class="btn ghost block" data-act="mult-reset">기본값(×1)으로 되돌리기</button>`;
   }
 
   // ----------------------------------------------------------- overlays
@@ -454,7 +510,7 @@
         <div><span>❤️ 체력</span>${s.hp}</div><div><span>⚔️ 공격</span>${s.atk}</div>
         <div><span>🛡️ 방어</span>${s.def}</div><div><span>💨 속도</span>${s.spd}</div>
         <div><span>💪 전투력</span>${fmt(s.power)}</div><div><span>💗 애정도</span>${d.affection || 0}/100</div>
-        <div><span>🪙 생산</span>${D.goldRate(d).toFixed(1)}/분</div><div><span>📅 나이</span>${fmtTime(Date.now() - d.born)}</div>
+        <div><span>🪙 생산</span>${fmt(G.goldRate(d))}/분</div><div><span>📅 나이</span>${fmtTime(Date.now() - d.born)}</div>
       </div>
       <div class="traits">${traits.map(x => `<span>${x}</span>`).join('')}</div>
       <div class="row">
@@ -566,6 +622,45 @@
     switch (act) {
       case 'close': closeOverlay(); break;
       case 'dex': showDex(); break;
+      case 'difficulty': openDifficulty(); break;
+      case 'pw-ok': {
+        const inp = $('#pw-input');
+        if (!inp) break;
+        if (pwHash(inp.value) !== PW_HASH) {
+          $('#pw-err').textContent = '비밀번호가 틀렸어요';
+          inp.value = '';
+          inp.focus();
+          break;
+        }
+        diffUnlocked = true;
+        try { sessionStorage.setItem('dn-diff', '1'); } catch (e) { /* ignore */ }
+        closeOverlay();
+        setTab('difficulty');
+        break;
+      }
+      case 'diff-lock':
+        diffUnlocked = false;
+        try { sessionStorage.removeItem('dn-diff'); } catch (e) { /* ignore */ }
+        setTab('nest');
+        toast('🔒 난이도 설정을 잠갔어요');
+        break;
+      case 'mult-set': G.setMult(btn.dataset.k, +btn.dataset.v); toast(`${MULT_INFO[btn.dataset.k].nm} ${fmtMult(+btn.dataset.v)}`); break;
+      case 'mult-custom': {
+        const k = btn.dataset.k;
+        const v = parseFloat($('#mult-' + k).value);
+        if (!(v >= G.MULT_MIN && v <= G.MULT_MAX)) { toast(`×${G.MULT_MIN} ~ ×${fmt(G.MULT_MAX)} 사이로 입력하세요`); break; }
+        G.setMult(k, v);
+        toast(`${MULT_INFO[k].nm} ${fmtMult(G.S.mult[k])}`);
+        break;
+      }
+      case 'mult-preset': {
+        const v = +btn.dataset.v;
+        for (const k of G.MULT_KEYS) G.S.mult[k] = v;
+        G.changed();
+        toast(`모든 배율 ${fmtMult(v)}`);
+        break;
+      }
+      case 'mult-reset': G.resetMult(); toast('기본값으로 되돌렸어요'); break;
       case 'settings': showSettings(); break;
       case 'reset':
         askConfirm('데이터 초기화', '정말 모든 데이터를 지울까요?\n되돌릴 수 없어요.', '초기화', () => { G.reset(); setTab('hatch'); toast('새로 시작했어요!'); });
@@ -665,7 +760,7 @@
       case 'buy-food': {
         const it = G.SHOP_FOOD[+btn.dataset.i];
         const r = G.buyFood(it);
-        if (r.err) toast(r.err); else floatAt(btn, `🍖 +${it.amount}`);
+        if (r.err) toast(r.err); else floatAt(btn, `🍖 +${fmt(r.amount)}`);
         break;
       }
       case 'pick-adv':
@@ -734,6 +829,12 @@
       if (card) { G.S.selectedId = +card.dataset.id; G.changed(); return; }
       const a = e.target.closest('[data-act]');
       if (a) onAction(a.dataset.act, a);
+    });
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Enter' && e.target.id && e.target.id.startsWith('mult-')) {
+        const b = document.querySelector(`[data-act="mult-custom"][data-k="${e.target.id.slice(5)}"]`);
+        if (b) onAction('mult-custom', b);
+      }
     });
     // 드래곤을 직접 터치하면 쓰다듬기
     document.addEventListener('click', e => {
