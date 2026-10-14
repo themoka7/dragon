@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>드래곤 생성기 갤러리</title>
+<style>
+body{margin:0;background:#1a1030;color:#fff;font-family:sans-serif}
+#grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(var(--cell,240px),1fr));gap:8px;padding:8px}
+.cell{background:radial-gradient(#3a2560,#140a24);border-radius:12px;text-align:center;font-size:12px;padding-bottom:6px}
+canvas{width:100%;aspect-ratio:1;display:block}
+</style></head><body>
+<div id="grid"></div>
+<script src="js/util.js"></script><script src="js/genome.js"></script><script src="js/render.js"></script>
+<script>
+const q = new URLSearchParams(location.search);
+const n = +(q.get('n') || 12), stage = q.get('stage'), seed0 = +(q.get('seed') || 1);
+const items = [];
+if (q.get('cell')) document.body.style.setProperty('--cell', q.get('cell') + 'px');
+for (let i = 0; i < n; i++) {
+  const g = DV.data.generateGenome({ seed: seed0 + i * 7919, rarity: q.get('r') != null ? +q.get('r') : undefined, body: q.get('body') || undefined });
+  for (const key of ['wing','crest','back','tailTip','pattern','eye','element']) if (q.get(key)) g[key] = q.get(key);
+  const st = stage != null ? +stage : (i % 5);
+  const cell = document.createElement('div'); cell.className = 'cell';
+  const c = document.createElement('canvas'); c.width = 480; c.height = 480;
+  cell.appendChild(c);
+  cell.appendChild(document.createTextNode(`${DV.data.speciesName(g)} · ${DV.data.RARITIES[g.rarity].name} · ${DV.data.STAGES[st].name} · ${g.wing}/${g.horn.type}/${g.crest}/${g.back}/${g.tailTip}`));
+  document.getElementById('grid').appendChild(cell);
+  items.push({ c, g, st });
+}
+function frame(ts) {
+  const t = q.get('t') != null ? +q.get('t') : ts / 1000;
+  for (const it of items) {
+    const ctx = it.c.getContext('2d');
+    ctx.clearRect(0, 0, 480, 480);
+    DV.render.drawDragon(ctx, it.g, it.st, t, 240, 250, 440, { progress: 0.9 });
+  }
+  if (q.get('t') == null) requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script></body></html>

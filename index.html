@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#1b0f33">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="드래곤 둥지">
+<title>드래곤 둥지</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Jua&display=swap">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div id="app">
+  <header id="topbar">
+    <div class="res"><span class="ico">🪙</span><b id="r-gold">0</b></div>
+    <div class="res"><span class="ico">🍖</span><b id="r-food">0</b></div>
+    <div class="spacer"></div>
+    <button class="icon-btn" data-act="dex" aria-label="도감">📖</button>
+    <button class="icon-btn" data-act="settings" aria-label="설정">⚙️</button>
+  </header>
+  <main id="screens">
+    <section class="screen" id="screen-nest"></section>
+    <section class="screen" id="screen-hatch"></section>
+    <section class="screen" id="screen-adventure"></section>
+    <section class="screen" id="screen-breed"></section>
+    <section class="screen" id="screen-shop"></section>
+  </main>
+  <nav id="tabbar">
+    <button data-tab="nest"><i>🐉</i><span>둥지</span></button>
+    <button data-tab="hatch"><i>🥚</i><span>부화장</span><em class="dot" id="dot-hatch"></em></button>
+    <button data-tab="adventure"><i>⚔️</i><span>모험</span></button>
+    <button data-tab="breed"><i>💞</i><span>교배</span></button>
+    <button data-tab="shop"><i>🛒</i><span>상점</span><em class="dot" id="dot-shop"></em></button>
+  </nav>
+  <div id="overlay"></div>
+  <div id="fx"></div>
+  <div id="toast"></div>
+</div>
+<script src="js/util.js"></script>
+<script src="js/genome.js"></script>
+<script src="js/render.js"></script>
+<script src="js/state.js"></script>
+<script src="js/battle.js"></script>
+<script src="js/ui.js"></script>
+</body>
+</html>
