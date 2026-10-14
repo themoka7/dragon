@@ -21,6 +21,8 @@
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 html, body { margin: 0; height: 100%; color-scheme: dark; background: var(--bg0); color: var(--text); overscroll-behavior: none; }
 body { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+/* iOS 사파리는 user-select:none 이 입력칸까지 막으므로 다시 풀어준다 */
+input, textarea { -webkit-user-select: text; user-select: text; }
 button { font: inherit; color: inherit; border: 0; background: none; cursor: pointer; padding: 0; }
 h2, h3 { margin: 0; font-weight: normal; }
 
@@ -273,5 +275,11 @@ h2, h3 { margin: 0; font-weight: normal; }
 .chip.on { border-color: var(--gold); color: var(--gold); background: #ffcf4a22; }
 .custom { display: flex; gap: 6px; margin-top: 8px; }
 .custom input, .pw-input { flex: 1; min-width: 0; font: inherit; font-size: 16px; padding: 8px 10px; border-radius: 10px; border: 2px solid var(--line); background: #0006; color: var(--text); }
-.pw-input { width: 100%; font-size: 26px; text-align: center; letter-spacing: 10px; }
+.pw-dots { display: flex; justify-content: center; gap: 12px; height: 44px; align-items: center; }
+.pw-dots i { width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--line); background: #0006; }
+.pw-dots i.on { background: var(--gold); border-color: var(--gold); box-shadow: 0 0 8px var(--gold); }
+.pw-dots.shake { animation: shake .35s; }
+@keyframes shake { 25% { transform: translateX(-8px); } 50% { transform: translateX(8px); } 75% { transform: translateX(-4px); } }
+.keypad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 8px; }
+.keypad .btn { font-size: 22px; min-height: 54px; touch-action: manipulation; }
 .pw-err { color: var(--bad); text-align: center; min-height: 20px; margin-top: 6px; font-size: 14px; }
