@@ -38,6 +38,11 @@
     { name: '용왕의 왕좌', lv: [42, 50], elems: ['fire', 'water', 'forest', 'thunder', 'light', 'dark'], rar: [0, 0, 30, 55, 15], bg: [330, 35], gold: 1800, food: 45 },
   ];
 
+  // 난이도 배율 (1 = 기본)
+  const MULT_KEYS = ['gold', 'exp', 'food', 'hatch'];
+  const MULT_MIN = 0.1, MULT_MAX = 1000000;
+  const defaultMult = () => ({ gold: 1, exp: 1, food: 1, hatch: 1 });
+
   let S = null;
   const listeners = new Set();
 
@@ -47,6 +52,7 @@
       cleared: 0, lastFreeEgg: 0, nextId: 1,
       stats: { hatched: 0, battles: 0, wins: 0, bred: 0 },
       created: Date.now(), tutorial: true,
+      mult: defaultMult(),
     };
   }
 
@@ -55,6 +61,7 @@
       const raw = localStorage.getItem(SAVE_KEY);
       if (raw) {
         S = Object.assign(defaultState(), JSON.parse(raw));
+        S.mult = Object.assign(defaultMult(), S.mult);
         return false;
       }
     } catch (e) { /* 저장소를 못 쓰는 환경이면 새로 시작 */ }
@@ -89,9 +96,24 @@
     S.eggs.push(egg);
     return egg;
   }
-  const eggProgress = e => Math.min(1, (Date.now() - e.start) / e.dur);
-  const eggReady = e => Date.now() - e.start >= e.dur;
-  const skipCost = e => Math.ceil(Math.max(0, e.dur - (Date.now() - e.start)) / 1000) * 3;
+  const m = k => S.mult[k] || 1;
+  // 부화 속도 배율은 이미 부화 중인 알에도 바로 적용된다
+  const eggDur = e => e.dur / m('hatch');
+  const eggLeft = e => Math.max(0, eggDur(e) - (Date.now() - e.start));
+  const eggProgress = e => Math.min(1, (Date.now() - e.start) / eggDur(e));
+  const eggReady = e => eggLeft(e) <= 0;
+  const skipCost = e => Math.ceil(eggLeft(e) / 1000) * 3;
+  const expPerFood = () => Math.max(1, Math.round(CONFIG.expPerFood * m('exp')));
+  const goldRate = d => D.goldRate(d) * m('gold');
+
+  function setMult(key, v) {
+    if (!MULT_KEYS.includes(key)) return;
+    v = Number(v);
+    if (!isFinite(v) || v <= 0) return;
+    S.mult[key] = Math.min(MULT_MAX, Math.max(MULT_MIN, v));
+    changed();
+  }
+  function resetMult() { S.mult = defaultMult(); changed(); }
 
   function hatch(eggId, force) {
     const egg = S.eggs.find(e => e.id === eggId);
@@ -145,12 +167,12 @@
     // 필요한 만큼만 먹인다
     let used = 0, ups = 0;
     while (used < n && !atCap(d)) {
-      ups += addExp(d, CONFIG.expPerFood);
+      ups += addExp(d, expPerFood());
       used++;
     }
     S.food -= used;
     changed();
-    return { used, ups, exp: used * CONFIG.expPerFood };
+    return { used, ups, exp: used * expPerFood() };
   }
 
   function pet(d) {
@@ -158,7 +180,7 @@
     if (left > 0) return { err: `${Math.ceil(left / 1000)}초 뒤에 다시 쓰다듬을 수 있어요` };
     d.petAt = Date.now();
     d.affection = Math.min(100, (d.affection || 0) + 2);
-    const ups = atCap(d) ? 0 : addExp(d, 5);
+    const ups = atCap(d) ? 0 : addExp(d, Math.max(1, Math.round(5 * m('exp'))));
     changed();
     return { ups };
   }
@@ -181,7 +203,7 @@
     changed();
   }
 
-  function releaseValue(d) { return Math.round(50 * d.level * D.RARITIES[d.genome.rarity].mult * d.stage); }
+  function releaseValue(d) { return Math.round(50 * d.level * D.RARITIES[d.genome.rarity].mult * d.stage * m('gold')); }
   function release(d) {
     if (S.dragons.length <= 1) return { err: '마지막 드래곤은 놓아줄 수 없어요' };
     const g = releaseValue(d);
@@ -194,7 +216,7 @@
 
   function pendingGold(d) {
     const mins = (Date.now() - d.lastCollect) / 60000;
-    return Math.floor(Math.min(mins, CONFIG.goldCapHours * 60) * D.goldRate(d));
+    return Math.floor(Math.min(mins, CONFIG.goldCapHours * 60) * goldRate(d));
   }
   function totalPending() { return S.dragons.reduce((a, d) => a + pendingGold(d), 0); }
   function collectAll() {
@@ -205,7 +227,7 @@
       if (g > 0) {
         sum += g;
         // 소수점 이하 분은 다음 수집으로 이월
-        d.lastCollect = Math.max(d.lastCollect + (g / D.goldRate(d)) * 60000, now - CONFIG.goldCapHours * 3600000);
+        d.lastCollect = Math.max(d.lastCollect + (g / goldRate(d)) * 60000, now - CONFIG.goldCapHours * 3600000);
       }
     }
     S.gold += sum;
@@ -228,9 +250,10 @@
   function buyFood(item) {
     if (S.gold < item.price) return { err: '골드가 부족해요' };
     S.gold -= item.price;
-    S.food += item.amount;
+    const amount = Math.round(item.amount * m('food'));
+    S.food += amount;
     changed();
-    return { ok: true };
+    return { ok: true, amount };
   }
   const freeEggLeft = () => Math.max(0, S.lastFreeEgg + CONFIG.freeEggCooldown - Date.now());
   function claimFreeEgg() {
@@ -277,13 +300,13 @@
     const res = { gold: 0, food: 0, exp: 0, ups: 0, unlocked: false };
     if (win) {
       S.stats.wins++;
-      res.gold = Math.round(R.gold * (0.85 + Math.random() * 0.3));
-      res.food = R.food;
-      res.exp = Math.round(15 + R.lv[1] * 8);
+      res.gold = Math.round(R.gold * (0.85 + Math.random() * 0.3) * m('gold'));
+      res.food = Math.round(R.food * m('food'));
+      res.exp = Math.round((15 + R.lv[1] * 8) * m('exp'));
       if (regionIdx >= S.cleared && regionIdx < REGIONS.length - 1) { S.cleared = regionIdx + 1; res.unlocked = true; }
     } else {
-      res.gold = Math.round(R.gold * 0.15);
-      res.exp = Math.round(4 + R.lv[0] * 2);
+      res.gold = Math.round(R.gold * 0.15 * m('gold'));
+      res.exp = Math.round((4 + R.lv[0] * 2) * m('exp'));
     }
     S.gold += res.gold;
     S.food += res.food;
@@ -296,7 +319,8 @@
     CONFIG, SHOP_EGGS, SHOP_FOOD, REGIONS,
     get S() { return S; },
     load, save, reset, changed, onChange: fn => listeners.add(fn),
-    eggProgress, eggReady, skipCost, hatch,
+    MULT_KEYS, MULT_MIN, MULT_MAX, setMult, resetMult, goldRate, expPerFood,
+    eggProgress, eggReady, eggLeft, skipCost, hatch,
     get, selected, atCap, canEvolve, feed, pet, evolve, rename, release, releaseValue,
     pendingGold, totalPending, collectAll,
     buyEgg, buyFood, freeEggLeft, claimFreeEgg,
