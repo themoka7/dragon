@@ -372,13 +372,30 @@
 
   function openDifficulty() {
     if (diffUnlocked) { setTab('difficulty'); return; }
+    pwBuf = '';
+    // 기기 키보드 대신 화면 키패드 (모바일 브라우저마다 입력칸 동작이 달라서)
     modal('🔒 난이도 조절', `<p class="center muted">비밀번호를 입력하세요</p>
-      <input id="pw-input" class="pw-input" type="password" inputmode="numeric" autocomplete="off" maxlength="12">
+      <div class="pw-dots" id="pw-dots"></div>
       <div class="pw-err" id="pw-err"></div>
-      <div class="row"><button class="btn ghost" data-act="close">취소</button><button class="btn gold" data-act="pw-ok">확인</button></div>`);
-    const inp = $('#pw-input');
-    inp.addEventListener('keydown', e => { if (e.key === 'Enter') onAction('pw-ok'); });
-    setTimeout(() => inp.focus(), 50);
+      <div class="keypad">
+        ${[1, 2, 3, 4, 5, 6, 7, 8, 9].map(n => `<button class="btn ghost" data-act="pw-key" data-k="${n}">${n}</button>`).join('')}
+        <button class="btn ghost" data-act="pw-key" data-k="del">⌫</button>
+        <button class="btn ghost" data-act="pw-key" data-k="0">0</button>
+        <button class="btn gold" data-act="pw-ok">확인</button>
+      </div>`);
+    drawPwDots();
+  }
+  let pwBuf = '';
+  function drawPwDots() {
+    const el = $('#pw-dots');
+    if (el) el.innerHTML = Array.from({ length: Math.max(4, pwBuf.length) }, (_, i) => `<i class="${i < pwBuf.length ? 'on' : ''}"></i>`).join('');
+  }
+  function pwKey(k) {
+    if (!$('#pw-dots')) return;
+    if (k === 'del') pwBuf = pwBuf.slice(0, -1);
+    else if (pwBuf.length < 8) pwBuf += k;
+    $('#pw-err').textContent = '';
+    drawPwDots();
   }
 
   const MULT_INFO = {
@@ -623,15 +640,20 @@
       case 'close': closeOverlay(); break;
       case 'dex': showDex(); break;
       case 'difficulty': openDifficulty(); break;
+      case 'pw-key': pwKey(btn.dataset.k); break;
       case 'pw-ok': {
-        const inp = $('#pw-input');
-        if (!inp) break;
-        if (pwHash(inp.value) !== PW_HASH) {
+        const dots = $('#pw-dots');
+        if (!dots) break;
+        if (pwHash(pwBuf) !== PW_HASH) {
           $('#pw-err').textContent = '비밀번호가 틀렸어요';
-          inp.value = '';
-          inp.focus();
+          pwBuf = '';
+          drawPwDots();
+          dots.classList.remove('shake');
+          void dots.offsetWidth;
+          dots.classList.add('shake');
           break;
         }
+        pwBuf = '';
         diffUnlocked = true;
         try { sessionStorage.setItem('dn-diff', '1'); } catch (e) { /* ignore */ }
         closeOverlay();
@@ -831,6 +853,12 @@
       if (a) onAction(a.dataset.act, a);
     });
     document.addEventListener('keydown', e => {
+      if ($('#pw-dots')) {
+        if (/^[0-9]$/.test(e.key)) pwKey(e.key);
+        else if (e.key === 'Backspace') pwKey('del');
+        else if (e.key === 'Enter') onAction('pw-ok');
+        return;
+      }
       if (e.key === 'Enter' && e.target.id && e.target.id.startsWith('mult-')) {
         const b = document.querySelector(`[data-act="mult-custom"][data-k="${e.target.id.slice(5)}"]`);
         if (b) onAction('mult-custom', b);
